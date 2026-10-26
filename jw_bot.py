@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-# versione 1.0.1
+# versione 1.1
 Bot Telegram per le novità di https://www.jw.org/it/cosa-nuovo/
 
 Controlla la pagina, trova gli elementi nuovi e manda un messaggio Telegram
@@ -133,24 +133,83 @@ def get_chat_id():
 
 def send(chat_id, text):
     tg("sendMessage", chat_id=chat_id, text=text, parse_mode="HTML",
-       disable_web_page_preview="false")
+       disable_web_page_preview="true")
+
+
+MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
+        "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+
+EMOJI = [("NEWS", "🗞"), ("CANZON", "🎵"), ("MUSIC", "🎵"), ("VIDEO", "🎬"),
+         ("BROADCAST", "🎬"), ("TORRE", "📖"), ("VIGILATE", "📖"), ("RIVIST", "📖"),
+         ("GUIDA", "🗒"), ("ADUNANZA", "🗒"), ("LIBR", "📚"), ("OPUSCOL", "📚"),
+         ("INDIC", "🔎"), ("DONAZION", "🌍")]
 
 
 def esc(s):
     return html.escape(s, quote=False)
 
 
-def format_message(it):
-    lines = ["📢 <b>Novità su JW.ORG</b>"]
-    if it["category"]:
-        lines.append(f"<i>{esc(it['category'].title())}</i>")
-    lines.append(f"<b>{esc(it['title'])}</b>")
-    if it["desc"]:
-        lines.append(esc(it["desc"]))
+def data_it(d):
+    try:
+        y, m, g = d.split("-")
+        return f"{int(g)} {MESI[int(m) - 1]} {y}"
+    except Exception:
+        return d
+
+
+def emoji_for(category):
+    up = category.upper()
+    for key, em in EMOJI:
+        if key in up:
+            return em
+    return "📢"
+
+
+def get_image(link):
+    """Immagine principale dell'articolo (og:image), se c'è."""
+    try:
+        r = requests.get(link, headers=HEADERS, timeout=30)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        for attr, name in (("property", "og:image"), ("name", "twitter:image")):
+            tag = soup.find("meta", attrs={attr: name})
+            if tag and tag.get("content") and "placeholder" not in tag["content"]:
+                return urllib.parse.urljoin(BASE, tag["content"])
+    except Exception as e:
+        print(f"Immagine non trovata per {link}: {e}")
+    return None
+
+
+def format_caption(it):
+    cat = it["category"].strip()
+    lines = [f"{emoji_for(cat)} <b>{esc(it['title'])}</b>", ""]
+    meta = []
+    if cat:
+        meta.append(f"🏷 {esc(cat.title())}")
     if it["date"]:
-        lines.append(f"🗓 {it['date']}")
-    lines.append(esc(it["link"]))
+        meta.append(f"🗓 {data_it(it['date'])}")
+    if meta:
+        lines.append("  ·  ".join(meta))
+    if it["desc"]:
+        desc = it["desc"] if len(it["desc"]) <= 600 else it["desc"][:597] + "…"
+        lines += ["", f"<i>{esc(desc)}</i>"]
     return "\n".join(lines)
+
+
+def send_item(chat_id, it, intro=""):
+    caption = (intro + format_caption(it))[:1024]
+    button = json.dumps({"inline_keyboard": [[
+        {"text": "📖 Leggi su JW.ORG", "url": it["link"]}]]})
+    image = get_image(it["link"])
+    if image:
+        try:
+            tg("sendPhoto", chat_id=chat_id, photo=image, caption=caption,
+               parse_mode="HTML", reply_markup=button)
+            return
+        except Exception as e:
+            print(f"Foto non inviata, mando solo testo: {e}")
+    tg("sendMessage", chat_id=chat_id, text=caption, parse_mode="HTML",
+       disable_web_page_preview="true", reply_markup=button)
 
 
 def main():
@@ -163,9 +222,9 @@ def main():
     seen = load_state()
     if seen is None:
         # Primo avvio: memorizza tutto senza inviare, solo un messaggio di conferma
-        send(chat_id, "✅ Bot JW.ORG attivo! Ti avviserò per ogni novità su "
-                      "jw.org/it/cosa-nuovo.\n\nUltima uscita:\n\n"
-                      + format_message(items[0]))
+        send_item(chat_id, items[0],
+                  intro="✅ <b>Bot JW.ORG attivo!</b> Ti avviserò per ogni novità.\n"
+                        "Ecco l'ultima uscita:\n\n")
         save_state({i["link"] for i in items})
         print(f"Primo avvio: {len(items)} elementi memorizzati.")
         return
@@ -173,7 +232,7 @@ def main():
     new = [i for i in items if i["link"] not in seen]
     # Dal più vecchio al più recente, così in chat arrivano in ordine
     for it in reversed(new):
-        send(chat_id, format_message(it))
+        send_item(chat_id, it)
         seen.add(it["link"])
         save_state(seen)          # salva subito: niente doppioni se un invio fallisce
         time.sleep(1)
