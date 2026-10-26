@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-# versione 1.1
+# versione 1.1.1
 Bot Telegram per le novità di https://www.jw.org/it/cosa-nuovo/
 
 Controlla la pagina, trova gli elementi nuovi e manda un messaggio Telegram
