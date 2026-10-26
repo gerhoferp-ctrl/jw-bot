@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: "*/30 * * * *"   # ogni 30 minuti
   workflow_dispatch:          # permette di avviarlo a mano
+  push:                       # parte anche quando cambia lo script
+    paths:
+      - "jw_bot.py"
+      - ".github/workflows/jw-bot.yml"
 
 permissions:
   contents: write
