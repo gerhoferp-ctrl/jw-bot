@@ -39,6 +39,11 @@ jobs:
         run: |
           git config user.name "jw-bot"
           git config user.email "jw-bot@users.noreply.github.com"
-          git add seen.json chat_id.txt 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "Aggiorna articoli visti"
-          git push || true
+          for f in seen.json chat_id.txt; do [ -f "$f" ] && git add "$f"; done
+          git diff --cached --quiet && exit 0
+          git commit -m "Aggiorna articoli visti"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep 5
+          done
+          echo "Impossibile salvare lo stato" && exit 1
