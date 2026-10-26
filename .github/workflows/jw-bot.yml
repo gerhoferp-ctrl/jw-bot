@@ -1,0 +1,40 @@
+name: Bot novità JW.ORG
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # ogni 30 minuti
+  workflow_dispatch:          # permette di avviarlo a mano
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jw-bot
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests beautifulsoup4
+
+      - name: Controlla novità e invia su Telegram
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python jw_bot.py
+
+      - name: Salva l'elenco degli articoli già visti
+        if: always()
+        run: |
+          git config user.name "jw-bot"
+          git config user.email "jw-bot@users.noreply.github.com"
+          git add seen.json chat_id.txt 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "Aggiorna articoli visti"
+          git push || true
